@@ -21,7 +21,7 @@ Also verify:
 
 ### LLM
 
-Re-test on the latest combined image:
+Re-test on the latest direct-build image:
 
 - named `/say` routes to the named bot only
 - unnamed `/say` does not cause a bot pile-on
@@ -30,21 +30,17 @@ Re-test on the latest combined image:
 - combat state/current target reach the prompt correctly
 - bot-to-bot behavior respects configured chance and proximity rules
 
-## 2. Remove patch-based PlayerBots build
+## 2. Remove patch-based PlayerBots build — COMPLETE
 
-Current state:
+Completed on 2026-09-11:
 
-- custom PlayerBots code is versioned in `Gohan4711/playerbots`
-- deploy still clones upstream `cmangos/playerbots` at `89a4e5a...` and applies `docker/server/llm-status-context.patch`
-
-Target state:
-
-- Docker build clones `Gohan4711/playerbots`
-- build pins an exact custom commit
-- no generated PlayerBots patch is required
-- `docker/server/llm-status-context.patch` can be removed
-
-This is the next major maintainability cleanup.
+- Docker now clones `Gohan4711/playerbots` directly
+- build pins custom commit `2adf08264f5e387c598713595c7942a29f90a21e`
+- no generated PlayerBots patch is applied
+- `docker/server/llm-status-context.patch` has been removed from the active deploy tree
+- the direct build completed successfully
+- the recreated `mangosd` container was verified to use image `sha256:bb189b65bb583e6cdf9dd1866ada1b56089b674aed071c61e3551425b62d82df`
+- PlayerBots initialized successfully from that image
 
 ## 3. Profession assignment system
 

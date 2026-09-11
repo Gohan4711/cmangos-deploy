@@ -109,13 +109,14 @@ The runtime image now creates:
 
 This fixed PlayerBots startup without hardcoding Docker-specific paths into PlayerBots source.
 
-## Current temporary build integration
+## Current build integration
 
-The current custom Dockerfile still:
+The custom Dockerfile now:
 
-1. clones pinned upstream CMaNGOS core and PlayerBots revisions,
-2. applies `docker/server/llm-status-context.patch`,
-3. forces CMake `FetchContent` to use the patched in-tree PlayerBots source,
-4. compiles the combined image.
+1. clones the pinned upstream CMaNGOS core revision,
+2. clones `Gohan4711/playerbots` at pinned commit `2adf08264f5e387c598713595c7942a29f90a21e`,
+3. copies that exact PlayerBots tree into the core modules directory,
+4. forces CMake `FetchContent` to use the pinned in-tree PlayerBots source,
+5. compiles the combined image.
 
-Now that `Gohan4711/playerbots` exists, this is considered transitional. The intended next cleanup is to build directly from the custom PlayerBots fork at a pinned commit and then remove the generated patch from the deploy repository.
+No generated PlayerBots patch is required in the current build path.

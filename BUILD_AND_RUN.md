@@ -4,16 +4,14 @@ This document records the current known-good workflow for the custom CMaNGOS Cla
 
 ## Current build model
 
-The current Docker image still builds from upstream PlayerBots at a pinned revision and then applies `docker/server/llm-status-context.patch`.
+The Docker image builds directly from the custom `Gohan4711/playerbots` fork at a pinned commit. No generated PlayerBots patch is applied.
 
 Pinned revisions used for the known-good build:
 
 - CMaNGOS core: `8ec338a1704e7dcb1c0213eb7ed58f9231ade40f`
-- PlayerBots base: `89a4e5aebd6aa41ee87f6e65d89b66fff5c5c7c1`
+- Custom PlayerBots: `2adf08264f5e387c598713595c7942a29f90a21e`
 
-Custom PlayerBots source is also versioned separately in `Gohan4711/playerbots` on branch `llm-status-context`; the current custom checkpoint is `2adf08264f5e387c598713595c7942a29f90a21e`.
-
-The patch-based Docker path is temporary and should eventually be replaced with a direct build from the custom PlayerBots fork.
+PlayerBots source is versioned in `Gohan4711/playerbots` on branch `llm-status-context`.
 
 ## Build command
 
@@ -24,7 +22,8 @@ cd ~/cmangos-deploy && docker build \
   -f docker/server/Dockerfile.llmstatus \
   --build-arg CMANGOS_EXPANSION=classic \
   --build-arg CMANGOS_CORE_REVISION=8ec338a1704e7dcb1c0213eb7ed58f9231ade40f \
-  --build-arg CMANGOS_PLAYERBOTS_REVISION=89a4e5aebd6aa41ee87f6e65d89b66fff5c5c7c1 \
+  --build-arg CMANGOS_PLAYERBOTS_REPOSITORY_URL=https://github.com/Gohan4711/playerbots.git \
+  --build-arg CMANGOS_PLAYERBOTS_REVISION=2adf08264f5e387c598713595c7942a29f90a21e \
   -t cmangos-server-classic-llmstatus:local \
   .
 ```
@@ -35,10 +34,10 @@ Known-good image tag:
 cmangos-server-classic-llmstatus:local
 ```
 
-Known-good manifest from the current combined build:
+Known-good image ID/manifest from the direct custom-fork build:
 
 ```text
-sha256:1844b0debea185e6595c652b64006d0774b33025b803a46a59256a9bbaac955a
+sha256:bb189b65bb583e6cdf9dd1866ada1b56089b674aed071c61e3551425b62d82df
 ```
 
 ## Runtime config path
@@ -107,6 +106,6 @@ docker compose down -v
 
 The `-v` option can remove persistent volumes and is not part of the normal development workflow.
 
-## Temporary patch detail
+## PlayerBots source pinning
 
-`docker/server/llm-status-context.patch` contains CRLF-derived lines from upstream PlayerBots source. A generic `git diff --check` reports trailing-whitespace warnings against the patch file itself. The patch has separately passed `git apply --check` and produced a successful build; do not normalize its line endings casually while it remains the active build artifact.
+The build uses `Gohan4711/playerbots` directly at the exact pinned commit above. Keep the revision pinned for reproducible builds; update it deliberately after new PlayerBots changes are committed and tested.

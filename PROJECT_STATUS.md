@@ -16,16 +16,16 @@ Run a reproducible CMaNGOS Classic server with PlayerBots, custom LLM chat behav
 
 ## Known-good revisions
 
-- Deploy checkpoint: `a5bfae1f568b54efa4187741d51912506c068bb1`
+- Previous patch-based deploy checkpoint: `a5bfae1f568b54efa4187741d51912506c068bb1`
 - Custom PlayerBots checkpoint: `2adf08264f5e387c598713595c7942a29f90a21e`
 - CMaNGOS core revision used for the current build: `8ec338a1704e7dcb1c0213eb7ed58f9231ade40f`
-- Upstream PlayerBots base revision used by the current Docker build: `89a4e5aebd6aa41ee87f6e65d89b66fff5c5c7c1`
+- Custom PlayerBots revision used by the current Docker build: `2adf08264f5e387c598713595c7942a29f90a21e`
 - Local image tag: `cmangos-server-classic-llmstatus:local`
-- Known-good image manifest from the current combined build: `sha256:1844b0debea185e6595c652b64006d0774b33025b803a46a59256a9bbaac955a`
+- Known-good direct-build image ID/manifest: `sha256:bb189b65bb583e6cdf9dd1866ada1b56089b674aed071c61e3551425b62d82df`
 
 ## Current runtime state
 
-The current combined image builds successfully and starts the server. PlayerBots configuration loading is fixed and PlayerBots initializes successfully.
+The current image builds directly from the pinned `Gohan4711/playerbots` custom commit, starts successfully, and initializes PlayerBots correctly. The generated PlayerBots patch is no longer part of the build path.
 
 Observed startup output includes:
 
@@ -70,8 +70,8 @@ Existing PlayerBots behavior already handles recipe use, bandage crafting when s
 ### Verified
 
 - Custom PlayerBots source compiles with the pinned CMaNGOS core.
-- Combined Docker image build completes successfully.
-- PlayerBots patch applied cleanly before build.
+- Direct Docker build from the pinned custom PlayerBots commit completes successfully.
+- The running `mangosd` container was verified to use image `sha256:bb189b65bb583e6cdf9dd1866ada1b56089b674aed071c61e3551425b62d82df`.
 - `mangosd`, `realmd`, and database containers start successfully.
 - `aiplayerbot.conf` is now found and PlayerBots initializes.
 - Both custom repositories and working branches are pushed to GitHub.
@@ -79,9 +79,7 @@ Existing PlayerBots behavior already handles recipe use, bandage crafting when s
 ### Still pending
 
 - In-game runtime test of the First Aid helper at skill thresholds 125 / 180 / 210 / 225.
-- Re-test the full LLM flow on the latest combined image after the First Aid changes.
-- Replace the temporary Docker patch workflow with direct builds from `Gohan4711/playerbots` at a pinned custom commit.
-- Remove `docker/server/llm-status-context.patch` once the Docker build consumes the custom PlayerBots repository directly.
+- Re-test the full LLM flow on the latest direct-build image after the First Aid changes.
 - Profession assignment/distribution implementation and profession hard-gate audit.
 
 ## Important operational rules
@@ -92,6 +90,6 @@ Existing PlayerBots behavior already handles recipe use, bandage crafting when s
 - Database and `realmd` do not need to be stopped for PlayerBots source builds.
 - LLM shim/Ollama are not required for PlayerBots startup or profession/First Aid tests.
 
-## Known repository detail
+## Build source of truth
 
-`docker/server/llm-status-context.patch` contains CRLF-derived lines from upstream source. `git diff --check` therefore reports trailing-whitespace warnings when checking the patch file itself. The active patch was separately verified with `git apply --check` and has produced a successful build. Do not normalize it casually while it remains part of the known-good build path.
+The Docker build now clones `Gohan4711/playerbots` directly and pins commit `2adf08264f5e387c598713595c7942a29f90a21e`. The former generated `docker/server/llm-status-context.patch` has been removed from the active build path.

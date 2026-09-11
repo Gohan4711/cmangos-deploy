@@ -5,8 +5,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG CMANGOS_EXPANSION=classic
 ARG CMANGOS_CORE_REPOSITORY_URL=https://github.com/cmangos/mangos-classic.git
 ARG CMANGOS_CORE_REVISION=master
-ARG CMANGOS_PLAYERBOTS_REPOSITORY_URL=https://github.com/cmangos/playerbots.git
-ARG CMANGOS_PLAYERBOTS_REVISION=master
+ARG CMANGOS_PLAYERBOTS_REPOSITORY_URL=https://github.com/Gohan4711/playerbots.git
+ARG CMANGOS_PLAYERBOTS_REVISION=2adf08264f5e387c598713595c7942a29f90a21e
 ARG CMANGOS_PATCHES_REPOSITORY_URL
 ARG CMANGOS_FAIL_ON_PATCH_ERROR=0
 ARG CMANGOS_USER_ID=1000
@@ -15,7 +15,6 @@ ARG CMANGOS_USER_NAME=cmangos
 ARG CMANGOS_GROUP_NAME=cmangos
 
 FROM ubuntu:26.04 AS build
-COPY ./docker/server/llm-status-context.patch /tmp/llm-status-context.patch
 
 ARG DEBIAN_FRONTEND
 ARG CMANGOS_EXPANSION
@@ -48,7 +47,6 @@ RUN \
   mkdir -p /build/core/src/modules && \
   cp -a /build/playerbots /build/core/src/modules/PlayerBots && \
   cd /build/core/src/modules/PlayerBots && \
-  git apply /tmp/llm-status-context.patch && \
   cd /build/core && \
   if [ -n "$CMANGOS_PATCHES_REPOSITORY_URL" ]; then \
     echo "Cloning and applying patches from $CMANGOS_PATCHES_REPOSITORY_URL"; \
@@ -107,11 +105,11 @@ RUN \
     -DBUILD_EXTRACTORS=ON \
     -DBUILD_PLAYERBOTS=ON \
     # The Playerbots module is fetched via CMake `FetchContent` with a floating
-    # `GIT_TAG "master"`. It is already cloned at the pinned revision, copied
-    # into this directory, and patched above, so
+    # `GIT_TAG "master"`. PlayerBots is already cloned at the pinned custom
+    # revision and copied into this directory, so
     # `FETCHCONTENT_SOURCE_DIR_PLAYERBOTS` makes `FetchContent` use that tree
-    # verbatim. Without it, `FetchContent` runs a Git checkout that reverts the
-    # patches and could pull a different revision than the pinned one.
+    # verbatim. Without it, `FetchContent` could replace the pinned custom
+    # revision with a different checkout.
     -DFETCHCONTENT_SOURCE_DIR_PLAYERBOTS=/build/core/src/modules/PlayerBots && \
   cmake --build . -j4 && \
   cmake --install .
