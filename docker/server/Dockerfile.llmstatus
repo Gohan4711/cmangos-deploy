@@ -111,7 +111,7 @@ RUN \
     # verbatim. Without it, `FetchContent` could replace the pinned custom
     # revision with a different checkout.
     -DFETCHCONTENT_SOURCE_DIR_PLAYERBOTS=/build/core/src/modules/PlayerBots && \
-  cmake --build . -j4 && \
+  cmake --build . -j8 && \
   cmake --install .
 
 FROM ubuntu:26.04
