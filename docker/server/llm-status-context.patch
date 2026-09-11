@@ -1,0 +1,323 @@
+diff --git a/playerbot/PlayerbotAI.cpp b/playerbot/PlayerbotAI.cpp
+index 81770449..8ac9a70c 100644
+--- a/playerbot/PlayerbotAI.cpp
++++ b/playerbot/PlayerbotAI.cpp
+@@ -1784,7 +1784,45 @@ void PlayerbotAI::HandleBotOutgoingPacket(const WorldPacket& packet)
+                     }
+                 }
+ 
++                // Keep the original cheap mention check for normal bot chat logic.
+                 bool isMentioned = message.find(bot->GetName()) != std::string::npos;
++
++                // More precise bot-name detection is only needed for real-player LLM /say.
++                bool hasBotMention = false;
++                bool isExplicitBotMention = false;
++
++                if (isAiChat && !isFromFreeBot && msgtype == CHAT_MSG_SAY)
++                {
++                    std::string mentionText = message;
++                    for (char& c : mentionText)
++                    {
++                        if (c == ',' || c == '.' || c == '!' || c == '?' || c == ':' || c == ';' ||
++                            c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}')
++                            c = ' ';
++                    }
++
++                    std::vector<std::string> mentionWords;
++                    boost::split(mentionWords, mentionText, boost::is_any_of(" \t"), boost::token_compress_on);
++
++                    for (std::string mentionName : mentionWords)
++                    {
++                        if (mentionName.empty() || !normalizePlayerName(mentionName))
++                            continue;
++
++                        ObjectGuid mentionGuid = sObjectMgr.GetPlayerGuidByName(mentionName);
++                        if (!mentionGuid)
++                            continue;
++
++                        Player* mentionedPlayer = sObjectMgr.GetPlayer(mentionGuid);
++                        if (!mentionedPlayer || !mentionedPlayer->GetPlayerbotAI())
++                            continue;
++
++                        hasBotMention = true;
++
++                        if (mentionGuid == bot->GetObjectGuid())
++                            isExplicitBotMention = true;
++                    }
++                }
+                 
+ 
+                 ChatChannelSource chatChannelSource = GetChatChannelSource(bot, msgtype, chanName);
+@@ -1843,8 +1881,22 @@ void PlayerbotAI::HandleBotOutgoingPacket(const WorldPacket& packet)
+                 }
+ 
+                 MANGOS_ASSERT(!message.empty());     
++                // LLM real-player /say:
++                // - if a bot is named, only the named bot(s) may reply
++                // - if no bot is named, each bot has a 10% reply chance
++                // - whispers remain unrestricted
++                if (isAiChat && !isFromFreeBot &&
++                    chatChannelSource == ChatChannelSource::SRC_SAY)
++                {
++                    if (hasBotMention && !isExplicitBotMention)
++                        return;
++
++                    if (!hasBotMention && urand(0, 99) >= 10)
++                        return;
++                }
++
+                 QueueChatResponse(msgtype, guid1, ObjectGuid(), message, chanName, name, isAiChat);
+-                GetAiObjectContext()->GetValue<time_t>("last said", "chat")->Set(time(0) + urand(5, 25));
++                GetAiObjectContext()->GetValue<time_t>("last said", "chat")->Set(time(0) + urand(35, 55));
+ 
+                 return;
+             }
+diff --git a/playerbot/strategy/actions/ActionContext.h b/playerbot/strategy/actions/ActionContext.h
+index ffa57699..c1d2394b 100644
+--- a/playerbot/strategy/actions/ActionContext.h
++++ b/playerbot/strategy/actions/ActionContext.h
+@@ -37,6 +37,7 @@
+ #include "CheckMountStateAction.h"
+ #include "ChangeTalentsAction.h"
+ #include "AutoLearnSpellAction.h"
++#include "FirstAidProgressionAction.h"
+ #include "XpGainAction.h"
+ #include "HonorGainAction.h"
+ #include "InviteToGroupAction.h"
+@@ -188,6 +189,7 @@ namespace ai
+             creators["mount"] = [](PlayerbotAI* ai) { return new CastSpellAction(ai, "mount"); };
+             creators["auto talents"] = [](PlayerbotAI* ai) { return new AutoSetTalentsAction(ai); };
+ 			creators["auto learn spell"] = [](PlayerbotAI* ai) { return new AutoLearnSpellAction(ai); };
++            creators["first aid progression"] = [](PlayerbotAI* ai) { return new FirstAidProgressionAction(ai); };
+             creators["auto share quest"] = [](PlayerbotAI* ai) { return new AutoShareQuestAction(ai); };
+             creators["xp gain"] = [](PlayerbotAI* ai) { return new XpGainAction(ai); };
+             creators["honor gain"] = [](PlayerbotAI* ai) { return new HonorGainAction(ai); };
+diff --git a/playerbot/strategy/actions/FirstAidProgressionAction.cpp b/playerbot/strategy/actions/FirstAidProgressionAction.cpp
+new file mode 100644
+index 00000000..b9a58fad
+--- /dev/null
++++ b/playerbot/strategy/actions/FirstAidProgressionAction.cpp
+@@ -0,0 +1,56 @@
++#include "FirstAidProgressionAction.h"
++
++#include "Entities/Item.h"
++#include "Entities/Player.h"
++
++using namespace ai;
++
++bool FirstAidProgressionAction::AddBook(uint32 itemId)
++{
++    if (bot->HasItemCount(itemId, 1))
++        return false;
++
++    ItemPrototype const* proto = sObjectMgr.GetItemPrototype(itemId);
++    if (!proto)
++        return false;
++
++    ItemPosCountVec itemVec;
++    InventoryResult result = bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, itemVec, itemId, 1);
++
++    if (result != EQUIP_ERR_OK)
++        return false;
++
++    bot->StoreNewItemInInventorySlot(itemId, 1);
++    return true;
++}
++
++bool FirstAidProgressionAction::Execute(Event& event)
++{
++    if (!bot->HasSkill(SKILL_FIRST_AID))
++        return false;
++
++    uint32 skill = bot->GetSkillValue(SKILL_FIRST_AID);
++
++    // Expert First Aid - Under Wraps
++    if (skill >= 125 && !bot->HasSpell(7924))
++        return AddBook(16084);
++
++    // Manual: Heavy Silk Bandage
++    if (skill >= 180 && !bot->HasSpell(7929))
++        return AddBook(16112);
++
++    // Manual: Mageweave Bandage
++    if (skill >= 210 && !bot->HasSpell(10840))
++        return AddBook(16113);
++
++    // Artisan First Aid.
++    // Triage is deliberately skipped, but the original teaching spell is used
++    // so the normal First Aid spell and skill step are applied by the core.
++    if (skill >= 225 && bot->GetLevel() >= 35 && !bot->HasSpell(10846))
++    {
++        bot->CastSpell(bot, 10847, TRIGGERED_OLD_TRIGGERED);
++        return true;
++    }
++
++    return false;
++}
+diff --git a/playerbot/strategy/actions/FirstAidProgressionAction.h b/playerbot/strategy/actions/FirstAidProgressionAction.h
+new file mode 100644
+index 00000000..5c9c4b98
+--- /dev/null
++++ b/playerbot/strategy/actions/FirstAidProgressionAction.h
+@@ -0,0 +1,18 @@
++#pragma once
++
++#include "playerbot/playerbot.h"
++#include "playerbot/strategy/Action.h"
++
++namespace ai
++{
++    class FirstAidProgressionAction : public Action
++    {
++    public:
++        FirstAidProgressionAction(PlayerbotAI* ai, std::string name = "first aid progression") : Action(ai, name) {}
++
++        bool Execute(Event& event) override;
++
++    private:
++        bool AddBook(uint32 itemId);
++    };
++}
+diff --git a/playerbot/strategy/actions/RpgSubActions.cpp b/playerbot/strategy/actions/RpgSubActions.cpp
+index b773b045..5b04a7d7 100644
+--- a/playerbot/strategy/actions/RpgSubActions.cpp
++++ b/playerbot/strategy/actions/RpgSubActions.cpp
+@@ -421,6 +421,10 @@ bool RpgAIChatAction::WaitForLines()
+ 
+ bool RpgAIChatAction::RequestNewLines()
+ {
++    // Safety gate: Alliance bots never generate LLM dialogue.
++    if (bot->GetTeam() == ALLIANCE)
++        return false;
++
+     if (packets.size())
+         return false;
+ 
+diff --git a/playerbot/strategy/actions/SayAction.cpp b/playerbot/strategy/actions/SayAction.cpp
+index 7960b000..d215a5b4 100644
+--- a/playerbot/strategy/actions/SayAction.cpp
++++ b/playerbot/strategy/actions/SayAction.cpp
+@@ -157,12 +157,25 @@ void ChatReplyAction::GetAIChatPlaceholders(std::map<std::string, std::string>&
+     WorldPosition pos(unit);
+     placeholders["<" + preFix + " zone>"] = pos.getAreaName();
+     placeholders["<" + preFix + " subzone>"] = pos.getAreaOverride();
++    placeholders["<" + preFix + " combat>"] = unit->IsInCombat() ? "in combat" : "not in combat";
+ 
+     if (unit->IsPlayer())
+     {
+         placeholders["<" + preFix + " type>"] = "player";
+         placeholders["<" + preFix + " subname>"] = "";
+         placeholders["<" + preFix + " gossip>"] = "";
++
++        placeholders["<" + preFix + " target>"] = "none";
++
++        Player* playerUnit = (Player*)unit;
++        if (PlayerbotAI* unitAi = playerUnit->GetPlayerbotAI())
++        {
++            AiObjectContext* unitContext = unitAi->GetAiObjectContext();
++            Unit* currentTarget = unitContext->GetValue<Unit*>("current target")->Get();
++
++            if (currentTarget)
++                placeholders["<" + preFix + " target>"] = currentTarget->GetName();
++        }
+     }
+     if (unit->IsCreature())
+     {
+@@ -509,7 +522,7 @@ void ChatReplyAction::ChatReplyDo(Player* bot, uint32 type, uint32 guid1, uint32
+         return;
+     }
+ 
+-    if (bot->GetPlayerbotAI() && sPlayerbotAIConfig.llmEnabled > 0 && (bot->GetPlayerbotAI()->HasStrategy("ai chat", BotState::BOT_STATE_NON_COMBAT) || sPlayerbotAIConfig.llmEnabled == 3) && chatChannelSource != ChatChannelSource::SRC_UNDEFINED && sPlayerbotAIConfig.llmBlockedReplyChannels.find(chatChannelSource) == sPlayerbotAIConfig.llmBlockedReplyChannels.end()
++    if (bot->GetTeam() != ALLIANCE && bot->GetPlayerbotAI() && sPlayerbotAIConfig.llmEnabled > 0 && (bot->GetPlayerbotAI()->HasStrategy("ai chat", BotState::BOT_STATE_NON_COMBAT) || sPlayerbotAIConfig.llmEnabled == 3) && chatChannelSource != ChatChannelSource::SRC_UNDEFINED && sPlayerbotAIConfig.llmBlockedReplyChannels.find(chatChannelSource) == sPlayerbotAIConfig.llmBlockedReplyChannels.end()
+         )
+     {
+         Player* player = sObjectAccessor.FindPlayer(ObjectGuid(HIGHGUID_PLAYER, guid1));
+@@ -531,7 +544,48 @@ void ChatReplyAction::ChatReplyDo(Player* bot, uint32 type, uint32 guid1, uint32
+         {
+             std::string playerName = player->GetName();
+ 
+-            if (player != bot && (player->isRealPlayer() || (sPlayerbotAIConfig.llmBotToBotChatChance && urand(0, 99) < sPlayerbotAIConfig.llmBotToBotChatChance)))
++            bool allowLlmReply = false;
++
++            if (player != bot)
++            {
++                if (player->isRealPlayer())
++                {
++                    allowLlmReply = true;
++                }
++                else if (chatChannelSource == ChatChannelSource::SRC_SAY &&
++                         sPlayerbotAIConfig.llmBotToBotChatChance &&
++                         bot->GetMapId() == player->GetMapId() &&
++                         sServerFacade.GetDistance2d(bot, player) <= 15.0f &&
++                         [&]()
++                         {
++                             for (auto& entry : sRandomPlayerbotMgr.GetPlayers())
++                             {
++                                 Player* realPlayer = entry.second;
++                                 if (!realPlayer)
++                                     continue;
++
++                                 if (realPlayer->GetMapId() != bot->GetMapId())
++                                     continue;
++
++                                 if (realPlayer->IsGameMaster() && !realPlayer->isGMVisible())
++                                     continue;
++
++                                 if (!sServerFacade.IsFriendlyTo(bot, realPlayer))
++                                     continue;
++
++                                 if (sServerFacade.GetDistance2d(bot, realPlayer) <= 50.0f)
++                                     return true;
++                             }
++
++                             return false;
++                         }() &&
++                         urand(0, 99) < sPlayerbotAIConfig.llmBotToBotChatChance)
++                {
++                    allowLlmReply = true;
++                }
++            }
++
++            if (allowLlmReply)
+             {
+                 std::map<std::string, std::string> placeholders;
+ 
+@@ -564,7 +618,7 @@ void ChatReplyAction::ChatReplyDo(Player* bot, uint32 type, uint32 guid1, uint32
+                 std::string llmPromptCustom = AI_VALUE(std::string, "manual saved string::llmdefaultprompt");
+ 
+                 std::map<std::string, std::string> jsonFill;
+-                jsonFill["<pre prompt>"] = sPlayerbotAIConfig.llmPrePrompt + " " + llmPromptCustom;
++                jsonFill["<pre prompt>"] = sPlayerbotAIConfig.llmPrePrompt + " " + llmPromptCustom + " Combat status: <bot combat>. Current target: <bot target>.";
+                 jsonFill["<prompt>"] = sPlayerbotAIConfig.llmPrompt;
+                 jsonFill["<post prompt>"] = sPlayerbotAIConfig.llmPostPrompt;
+ 
+diff --git a/playerbot/strategy/generic/MaintenanceStrategy.cpp b/playerbot/strategy/generic/MaintenanceStrategy.cpp
+index c9ed23fd..45cee334 100644
+--- a/playerbot/strategy/generic/MaintenanceStrategy.cpp
++++ b/playerbot/strategy/generic/MaintenanceStrategy.cpp
+@@ -10,6 +10,10 @@ void MaintenanceStrategy::InitNonCombatTriggers(std::list<TriggerNode*> &trigger
+         "random",
+         NextAction::array(0, new NextAction("clean quest log", 6.0f), NULL)));
+ 
++    triggers.push_back(new TriggerNode(
++        "random",
++        NextAction::array(0, new NextAction("first aid progression", 1.1f), NULL)));
++
+     triggers.push_back(new TriggerNode(
+         "random",
+         NextAction::array(0, new NextAction("use random recipe", 1.0f), NULL)));
+diff --git a/playerbot/strategy/triggers/RpgTriggers.cpp b/playerbot/strategy/triggers/RpgTriggers.cpp
+index 7055492d..beca9611 100644
+--- a/playerbot/strategy/triggers/RpgTriggers.cpp
++++ b/playerbot/strategy/triggers/RpgTriggers.cpp
+@@ -614,6 +614,10 @@ bool RpgQuestUseTrigger::IsActive()
+ 
+ bool RpgAIChatTrigger::IsActive()
+ {
++    // Alliance bots never use the LLM.
++    if (bot->GetTeam() == ALLIANCE)
++        return false;
++
+     if (sPlayerbotAIConfig.llmEnabled == 0)
+         return false;
+ 

@@ -5,3 +5,7 @@
 !/storage/**/
 !**/*.example
 !/**/.gitkeep
+
+# Local backup files
+*.bak
+*.bak-*
