@@ -16,6 +16,7 @@ Run a reproducible CMaNGOS Classic server with PlayerBots, custom LLM chat behav
 
 ## Known-good revisions
 
+- Current deploy checkpoint: `b6fc50f5413772104cdcee32fcc363e1ff125656`
 - Previous patch-based deploy checkpoint: `a5bfae1f568b54efa4187741d51912506c068bb1`
 - Custom PlayerBots checkpoint: `2adf08264f5e387c598713595c7942a29f90a21e`
 - CMaNGOS core revision used for the current build: `8ec338a1704e7dcb1c0213eb7ed58f9231ade40f`
