@@ -30,6 +30,7 @@ require_env OCI_ANNOTATION_VENDOR
 require_env OCI_ANNOTATION_LICENSES
 
 timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+repository_owner="$(printf '%s' "$(trim "$REPOSITORY_OWNER")" | tr '[:upper:]' '[:lower:]')"
 # shellcheck disable=SC2153
 architectures="$(trim "$ARCHITECTURES")"
 # shellcheck disable=SC2153
@@ -144,8 +145,7 @@ case "$WORKFLOW_MODE" in
     playerbots_revision="$(trim "$PLAYERBOTS_COMMIT_HASH")"
     primary_tag="$(trim "$COMBINED_REVISION_TAG")"
 
-    # shellcheck disable=SC2153
-    image_name="$REPOSITORY_OWNER/$image_name_base-$expansion"
+    image_name="$repository_owner/$image_name_base-$expansion"
     image="$REGISTRY/$image_name"
     ref_name="$image:$primary_tag"
 
@@ -176,7 +176,7 @@ case "$WORKFLOW_MODE" in
     core_repository_name="$(trim "$CORE_REPOSITORY_NAME")"
     custom_tag_fragment="$(trim "${CUSTOM_TAG_FRAGMENT:-}")"
 
-    image_name="$REPOSITORY_OWNER/$image_name_base-$expansion-custom"
+    image_name="$repository_owner/$image_name_base-$expansion-custom"
     image="$REGISTRY/$image_name"
 
     if [[ -n "$custom_tag_fragment" ]]; then
